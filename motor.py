@@ -1,8 +1,16 @@
 import atexit
-from Adafruit_MotorHAT import Adafruit_MotorHAT
 import traitlets
 from traitlets.config.configurable import Configurable
 
+import sys
+
+sys.path.append('/opt/nvidia/jetson-gpio/lib/python')
+sys.path.append('/opt/nvidia/jetson-gpio/lib/python/Jetson/GPIO')
+#sys.path.append('/home/nvidia/repositories/nano_gpio/gpio_env/lib/python2.7/site-packages/periphery/')
+sys.path.append('/home/jetbot/.local/lib/python2.7/site-packages')
+
+PWM_STOP_CH0 = 306
+PWM_STOP_CH1 = 306
 
 class Motor(Configurable):
 
@@ -15,8 +23,8 @@ class Motor(Configurable):
     def __init__(self, driver, channel, *args, **kwargs):
         super(Motor, self).__init__(*args, **kwargs)  # initializes traitlets
 
-        self._driver = driver
-        self._motor = self._driver.getMotor(channel)
+        self._motor = driver
+        self._channel = channel
         atexit.register(self._release)
         
     @traitlets.observe('value')
@@ -26,13 +34,20 @@ class Motor(Configurable):
     def _write_value(self, value):
         """Sets motor value between [-1, 1]"""
         mapped_value = int(255.0 * (self.alpha * value + self.beta))
-        speed = min(max(abs(mapped_value), 0), 255)
-        self._motor.setSpeed(speed)
-        if mapped_value < 0:
-            self._motor.run(Adafruit_MotorHAT.FORWARD)
+
+        if mapped_value < 0:    # 306=パルス幅1.5ms(stop),204=パルス幅1.0ms(forward),408=パルス幅2.0ms(backward)
+            if self._channel ==0:
+                self._motor.set_pwm(self._channel,round(PWM_STOP_CH0-102*abs(value)))
+            else:
+                self._motor.set_pwm(self._channel,round(PWM_STOP_CH1-102*abs(value)))          
         else:
-            self._motor.run(Adafruit_MotorHAT.BACKWARD)
+            if self._channel ==0:
+                self._motor.set_pwm(self._channel,round(PWM_STOP_CH0+102*abs(value)))
+            else:
+                self._motor.set_pwm(self._channel,round(PWM_STOP_CH1+102*abs(value)))
 
     def _release(self):
         """Stops motor by releasing control"""
-        self._motor.run(Adafruit_MotorHAT.RELEASE)
+        self._motor.set_pwm(0,PWM_STOP_CH0)
+        self._motor.set_pwm(1,PWM_STOP_CH1)
+
